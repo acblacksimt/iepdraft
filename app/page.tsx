@@ -23,11 +23,12 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState("")
   const [autofilling, setAutofilling] = useState(false)
   const [autofillError, setAutofillError] = useState("")
   const [filledFields, setFilledFields] = useState<string[]>([])
+  // Full raw text of the uploaded document(s). Held in memory (not shown in a box)
+  // and merged into the payload at submit so the complete record reaches the generator.
+  const [uploadedText, setUploadedText] = useState("")
 
   function update(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -61,6 +62,7 @@ export default function Home() {
         setAutofillError(data.error)
       } else {
         const fields = data.fields as Record<string, string>
+        const rawText = (data.rawText as string) || ""
         const filled: string[] = []
         setForm(prev => {
           const next = { ...prev }
@@ -74,9 +76,12 @@ export default function Home() {
           }
           return next
         })
+        // Keep the complete raw text in memory; it's merged into the payload at submit
+        // so the generator sees the full record, not just the summarized fields.
+        setUploadedText(rawText)
         setFilledFields(filled)
         if (filled.length === 0) {
-          setAutofillError("No new information was found in the documents. Please enter the details manually.")
+          setAutofillError("We couldn't match the document to specific fields, but its full text was attached and will be used when generating goals. Add any missing details below.")
         }
       }
     } catch {
@@ -92,10 +97,16 @@ export default function Home() {
     setGoals("")
     setEditableGoals("")
     setIsEditing(false)
+    // Merge the uploaded document's full raw text with any manually-pasted notes so the
+    // complete record reaches the generator from a single upload.
+    const supportingDocs = [uploadedText, form.supportingDocs]
+      .map(s => s.trim())
+      .filter(Boolean)
+      .join("\n\n")
     const res = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, supportingDocs }),
     })
     const data = await res.json()
     setGoals(data.goals)
@@ -131,24 +142,6 @@ export default function Home() {
     a.download = `IEP-Draft-${form.studentName || "Goals"}.doc`
     a.click()
     URL.revokeObjectURL(url)
-  }
-
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setUploadError("")
-    const fd = new FormData()
-    fd.append("file", file)
-    const res = await fetch("/api/extract", { method: "POST", body: fd })
-    const data = await res.json()
-    if (data.error) {
-      setUploadError(data.error)
-    } else {
-      update("supportingDocs", form.supportingDocs ? form.supportingDocs + "\n\n" + data.text : data.text)
-    }
-    setUploading(false)
-    e.target.value = ""
   }
 
   function handleEditToggle() {
@@ -201,7 +194,7 @@ export default function Home() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Start from existing documents <span className="text-slate-400 font-normal">(optional)</span></h3>
-                  <p className="text-xs text-slate-500 mt-1">Upload a prior IEP, evaluation, or report (PDF or .docx). We&apos;ll read it and auto-fill any fields we can find — you can review and edit everything before generating. Anything not found, just enter manually.</p>
+                  <p className="text-xs text-slate-500 mt-1">Upload a prior IEP, evaluation, or report (PDF or .docx). We&apos;ll auto-fill any fields we can find <em>and</em> include the full document when generating — you can review and edit everything first. Anything not found, just enter manually.</p>
                 </div>
                 <label className={`shrink-0 inline-flex items-center gap-2 cursor-pointer text-sm px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition ${autofilling ? "opacity-50 pointer-events-none" : ""}`}>
                   {autofilling ? "Reading…" : "Upload & auto-fill"}
@@ -211,7 +204,7 @@ export default function Home() {
               {autofillError && <p className="text-xs text-amber-700 mt-3">{autofillError}</p>}
               {filledFields.length > 0 && (
                 <p className="text-xs text-green-700 mt-3">
-                  ✓ Auto-filled {filledFields.length} field{filledFields.length === 1 ? "" : "s"}: {filledFields.map(f => fieldLabels[f]).join(", ")}. Review and edit below before generating.
+                  ✓ Auto-filled {filledFields.length} field{filledFields.length === 1 ? "" : "s"}: {filledFields.map(f => fieldLabels[f]).join(", ")}. The full document text is also attached and will be used when generating. Review and edit below.
                 </p>
               )}
             </div>
@@ -341,16 +334,11 @@ export default function Home() {
 
               <hr className="border-slate-100" />
 
-              {/* Supporting Documents */}
+              {/* Additional Notes */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">Supporting Documents <span className="text-slate-400 font-normal normal-case">(optional)</span></h3>
-                <label className={labelClass}>Upload or paste data from prior IEPs, evaluations, report cards, behavior logs, or SIS exports</label>
-                <p className={hintClass}>Upload a PDF or Word (.docx) file, or paste text directly. The more data you provide, the more accurate your goals will be.</p>
-                <label className={`no-print inline-flex items-center gap-2 mb-2 cursor-pointer text-sm px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
-                  {uploading ? "Extracting text..." : "Upload PDF or Word doc"}
-                  <input type="file" accept=".pdf,.docx" onChange={handleFileUpload} className="hidden" />
-                </label>
-                {uploadError && <p className="text-xs text-red-500 mb-2">{uploadError}</p>}
+                <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">Additional Notes <span className="text-slate-400 font-normal normal-case">(optional)</span></h3>
+                <label className={labelClass}>Paste any extra data not in an uploaded document</label>
+                <p className={hintClass}>Document(s) you upload above are already included in full. Use this box only to add notes, prior IEP goals, evaluation results, or behavior data that you&apos;re entering by hand. The more data you provide, the more accurate your goals will be.</p>
                 <textarea
                   value={form.supportingDocs}
                   onChange={e => update("supportingDocs", e.target.value)}
