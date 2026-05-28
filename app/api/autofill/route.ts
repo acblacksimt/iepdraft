@@ -7,16 +7,21 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 async function extractText(file: File): Promise<string> {
   const ext = file.name.split(".").pop()?.toLowerCase()
-  const buffer = Buffer.from(await file.arrayBuffer())
+  const arrayBuffer = await file.arrayBuffer()
 
   if (ext === "pdf") {
-    const parser = new PDFParse(buffer)
-    const result = await parser.getText()
-    return result.text
+    // pdf-parse v2 expects a Uint8Array via the `data` option, not a Node Buffer.
+    const parser = new PDFParse({ data: new Uint8Array(arrayBuffer) })
+    try {
+      const result = await parser.getText()
+      return result.text
+    } finally {
+      await parser.destroy()
+    }
   }
 
   if (ext === "docx") {
-    const result = await mammoth.extractRawText({ buffer })
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(arrayBuffer) })
     return result.value
   }
 
