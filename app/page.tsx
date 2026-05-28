@@ -1,7 +1,18 @@
 "use client"
 import { useState } from "react"
 import Image from "next/image"
-import ReactMarkdown from "react-markdown"
+
+function escapeHtml(text: string) {
+  const entities: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }
+
+  return text.replace(/[&<>"']/g, char => entities[char] || char)
+}
 
 export default function Home() {
   const [form, setForm] = useState({
@@ -22,7 +33,6 @@ export default function Home() {
   const [editableGoals, setEditableGoals] = useState("")
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
   const [autofilling, setAutofilling] = useState(false)
   const [autofillError, setAutofillError] = useState("")
   const [filledFields, setFilledFields] = useState<string[]>([])
@@ -96,7 +106,6 @@ export default function Home() {
     setLoading(true)
     setGoals("")
     setEditableGoals("")
-    setIsEditing(false)
     // Merge the uploaded document's full raw text with any manually-pasted notes so the
     // complete record reaches the generator from a single upload.
     const supportingDocs = [uploadedText, form.supportingDocs]
@@ -132,7 +141,7 @@ export default function Home() {
         <h1 style="font-size: 18pt;">IEP Draft</h1>
         <p style="color: #666; font-size: 10pt;">Generated IEP Goals — iepdraft.com</p>
         <hr/>
-        <div style="white-space: pre-wrap;">${editableGoals.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br/>")}</div>
+        <div style="white-space: pre-wrap;">${escapeHtml(editableGoals).replace(/\n/g, "<br/>")}</div>
       </body></html>
     `
     const blob = new Blob([html], { type: "application/msword" })
@@ -142,11 +151,6 @@ export default function Home() {
     a.download = `IEP-Draft-${form.studentName || "Goals"}.doc`
     a.click()
     URL.revokeObjectURL(url)
-  }
-
-  function handleEditToggle() {
-    if (isEditing) setGoals(editableGoals)
-    setIsEditing(!isEditing)
   }
 
   const inputClass = "w-full border border-slate-300 rounded-lg px-4 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -161,19 +165,6 @@ export default function Home() {
           body { background: white; font-family: Arial, sans-serif; }
           .print-area { box-shadow: none; border: none; padding: 20px; }
         }
-        .prose h1 { font-size: 1.4rem; font-weight: 700; margin: 1.2rem 0 0.5rem; color: #0f172a; }
-        .prose h2 { font-size: 1.15rem; font-weight: 700; margin: 1.4rem 0 0.4rem; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
-        .prose h3 { font-size: 1rem; font-weight: 600; margin: 1rem 0 0.3rem; color: #1e40af; }
-        .prose p { margin: 0.5rem 0; color: #334155; }
-        .prose ul { margin: 0.4rem 0 0.4rem 1.4rem; list-style-type: disc; }
-        .prose ol { margin: 0.4rem 0 0.4rem 1.4rem; list-style-type: decimal; }
-        .prose li { margin: 0.25rem 0; color: #334155; }
-        .prose strong { font-weight: 600; color: #0f172a; }
-        .prose blockquote { border-left: 3px solid #3b82f6; padding: 0.75rem 1rem; margin: 0.8rem 0; color: #1e293b; background: #f8fafc; border-radius: 0 6px 6px 0; }
-        .prose table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; font-size: 0.85rem; }
-        .prose th { background: #f1f5f9; padding: 8px 12px; text-align: left; font-weight: 600; border: 1px solid #e2e8f0; }
-        .prose td { padding: 8px 12px; border: 1px solid #e2e8f0; vertical-align: top; }
-        .prose hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.2rem 0; }
       `}</style>
 
       <div className="min-h-screen bg-slate-50">
@@ -194,17 +185,17 @@ export default function Home() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Start from existing documents <span className="text-slate-400 font-normal">(optional)</span></h3>
-                  <p className="text-xs text-slate-500 mt-1">Upload a prior IEP, evaluation, or report (PDF or .docx). We&apos;ll auto-fill any fields we can find <em>and</em> include the full document when generating — you can review and edit everything first. Anything not found, just enter manually.</p>
+                  <p className="text-xs text-slate-500 mt-1">Upload one or more prior IEPs, evaluations, reports, or progress notes (PDF or .docx). We&apos;ll auto-fill any fields we can find <em>and</em> include the full text from every document when generating. You can review and edit everything first.</p>
                 </div>
                 <label className={`shrink-0 inline-flex items-center gap-2 cursor-pointer text-sm px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition ${autofilling ? "opacity-50 pointer-events-none" : ""}`}>
-                  {autofilling ? "Reading…" : "Upload & auto-fill"}
+                  {autofilling ? "Reading…" : "Upload documents"}
                   <input type="file" accept=".pdf,.docx" multiple onChange={handleAutofill} className="hidden" />
                 </label>
               </div>
               {autofillError && <p className="text-xs text-amber-700 mt-3">{autofillError}</p>}
               {filledFields.length > 0 && (
                 <p className="text-xs text-green-700 mt-3">
-                  ✓ Auto-filled {filledFields.length} field{filledFields.length === 1 ? "" : "s"}: {filledFields.map(f => fieldLabels[f]).join(", ")}. The full document text is also attached and will be used when generating. Review and edit below.
+                  ✓ Auto-filled {filledFields.length} field{filledFields.length === 1 ? "" : "s"}: {filledFields.map(f => fieldLabels[f]).join(", ")}. The full text from each uploaded document is also attached and will be used when generating. Review and edit below.
                 </p>
               )}
             </div>
@@ -288,7 +279,7 @@ export default function Home() {
               {/* Present Levels */}
               <div>
                 <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">Present Levels (PLAAFP Narrative)</h3>
-                <label className={labelClass}>Describe the student's challenges, behaviors, and functional performance</label>
+                <label className={labelClass}>Describe the student&apos;s challenges, behaviors, and functional performance</label>
                 <p className={hintClass}>Include teacher observations, specific difficulties, frequency/duration of behaviors, and how the disability impacts access to general education. The more specific, the better.</p>
                 <textarea
                   value={form.plaafp}
@@ -305,7 +296,7 @@ export default function Home() {
               {/* Parent Concerns */}
               <div>
                 <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-3">Parent / Guardian Input</h3>
-                <label className={labelClass}>What are the parent's concerns and priorities?</label>
+                <label className={labelClass}>What are the parent&apos;s concerns and priorities?</label>
                 <p className={hintClass}>IDEA requires meaningful parent participation. Include concerns, observations from home, and their priorities for this IEP.</p>
                 <textarea
                   value={form.parentConcerns}
@@ -364,9 +355,6 @@ export default function Home() {
               <div className="flex items-center justify-between mb-6 no-print">
                 <h2 className="text-lg font-semibold text-slate-900">Generated IEP Goals</h2>
                 <div className="flex gap-2 flex-wrap justify-end">
-                  <button onClick={handleEditToggle} className="text-sm px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition">
-                    {isEditing ? "Preview" : "Edit"}
-                  </button>
                   <button onClick={handleCopy} className="text-sm px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition">
                     {copied ? "Copied!" : "Copy"}
                   </button>
@@ -385,21 +373,17 @@ export default function Home() {
                 <hr className="mt-3" />
               </div>
 
-              {isEditing ? (
-                <textarea
-                  value={editableGoals}
-                  onChange={e => setEditableGoals(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono leading-relaxed"
-                  rows={35}
-                />
-              ) : (
-                <div className="prose text-sm">
-                  <ReactMarkdown>{editableGoals}</ReactMarkdown>
-                </div>
-              )}
+              <textarea
+                value={editableGoals}
+                onChange={e => setEditableGoals(e.target.value)}
+                className="w-full min-h-[48rem] border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y leading-relaxed whitespace-pre-wrap print:hidden"
+                rows={38}
+                aria-label="Editable generated IEP goals"
+              />
+              <div className="hidden print:block whitespace-pre-wrap text-sm leading-relaxed text-slate-900">{editableGoals}</div>
 
               <p className="no-print mt-6 text-xs text-slate-400 border-t border-slate-100 pt-4">
-                Always review generated goals against the student's current baseline data and PLAAFP before including in a finalized IEP.
+                Always review generated goals against the student&apos;s current baseline data and PLAAFP before including in a finalized IEP.
               </p>
             </div>
           )}
